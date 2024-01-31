@@ -24,11 +24,10 @@
 
 import os
 import locale
-import vincent
 import argparse
 from collections import OrderedDict
-import statsmodels.stats.multitest as multitest
-from scipy import stats
+import statsmodels.sandbox.stats.multicomp as multi_correction
+from scipy.stats import chi2
 
 
 parser = argparse.ArgumentParser(description="This edited version of codeml_parser is a python 3 script that was"
@@ -290,7 +289,8 @@ class PamlPair ():
 			return
 
 		# Calculating chi-square test using scipy.stats
-		self.pvalue = stats.chi2.sf(lrt, 1)   ## df = 1 for the branch-site models lrt 
+		df = 1		## df = 1 for the branch-site models lrt
+		self.pvalue = float(1 - chi2(df).cdf(lrt))  
 
 	def filter_aa(self, clade, set_aa_columns=None):
 		""" This function returns a number of selected amino acid filters, such as conserved, unique or diversifying
@@ -615,7 +615,8 @@ class PamlPairSet ():
 
 		pvalue_list = [pval for pval in pvalue_dict.values()]
 
-		fdr_bool_list, fdr_pvalue_list = multitest.fdrcorrection(pvals=pvalue_list, alpha=alpha, method="i")
+		fdr_bool_list, fdr_pvalue_list, alpha_s, alpha_b = multi_correction.multipletests(pvalue_list, alpha=alpha,
+																				method="fdr_bh")
 
 		# Updating PamlPairs with corrected p-value
 		for gene, fdr_val in zip(pvalue_dict, fdr_pvalue_list):
