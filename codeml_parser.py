@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 #  codeml_parser.py
@@ -26,29 +26,23 @@ import os
 import locale
 import vincent
 import argparse
-import subprocess
 from collections import OrderedDict
-import statsmodels.sandbox.stats.multicomp as multi_correction
+import statsmodels.stats.multitest as multitest
+from scipy import stats
 
 
-parser = argparse.ArgumentParser(description="codeml_parser is a python 2 script developed to parse the output of "
-											"multiple branch site model results from PAML, performs chi-square test "
-											"of significance and produces informative plots and tables")
+parser = argparse.ArgumentParser(description="This edited version of codeml_parser is a python 3 script that was"
+											"developed to parse the output of  multiple branch site model results"
+											"from PAML and performs chi-square test of significance.")
 
-parser.add_argument("-in", dest="folder_list", nargs="+", required=True, help="The directories containing the output "
+parser.add_argument("-in", dest="folder_list", nargs="+", required=True, help="The list of the directories containing the output "
 																			"of the branch site model")
-# TODO: Provide choices in the clades option
-parser.add_argument("--clade", "-c", dest="clade", nargs="*", help="For clade specific statistics, provide the taxa "
+
+parser.add_argument("--clade", "-c", dest="clade", nargs="*", choices = ["pucciniales_genome", "pucciniales"], help="For clade specific statistics, provide the taxa "
 																"members"
-															"of such clade separated by whitespace")
-parser.add_argument("-o", dest="output_file", help="Provide the name for the output file")
-parser.add_argument("-hist", dest="histogram", nargs="*", choices=["all_selected"], help="Construct histograms from the"
-																						"data and according to a"
-																						"run mode of your choice")
-parser.add_argument("-p", dest="plot_options", nargs="*", choices=["a", "b"], help="Various plot options: 1 - Donut "
-																				"plot"
-																				"with the distribution of sites"
-																				"across several selection classes")
+															"of such clade separated by whitespace: 'pucciniales_genome' or 'pucciniales'")
+parser.add_argument("-o", dest="output_file", help="Provide the name for the output file, .csv format")
+
 parser.add_argument("-w", dest="write_alignments", action="store_const", const=True, help="Use this option if you want"
 																						"to write the gap-free "
 																						"alignments used by codeml")
@@ -96,8 +90,8 @@ class PamlPair ():
 
 		# The arguments of the following function are the specific substring of the codeml output file and it may be
 		# changed to conform to the output file names. Also, they do not need to be the same.
-		self.__parse_main_alternative__("y_selection")
-		self.__parse_main_null__("y_selection")
+		self.__parse_main_alternative__(".mlc")
+		self.__parse_main_null__(".mlc")
 
 	def set_fdr(self, fdr):
 		""" Update the pvalue """
@@ -127,7 +121,7 @@ class PamlPair ():
 		# Assuming that the output files of the alternative hypothesis are inside a folder named "Alternative",
 		# this will find the codeml output file based on a specific substring (file_suffix)
 		folder_contents = os.listdir(self.folder + subfolder)
-		file_path = self.folder + subfolder + "".join([x for x in folder_contents if file_suffix in x])
+		file_path = self.folder + subfolder + "/" + "".join([x for x in folder_contents if file_suffix in x])
 
 		# If the output file does not exist, set the status for this Pair object to false and return
 		if file_path == self.folder + subfolder:
@@ -255,7 +249,7 @@ class PamlPair ():
 		# Assuming that the output files of the null hypothesis are inside a folder named "Null",
 		# this will find the codeml output file based on a specific substring (file_suffix)
 		folder_contents = os.listdir(self.folder + subfolder)
-		file_path = self.folder + subfolder + "".join([x for x in folder_contents if file_suffix in x])
+		file_path = self.folder + subfolder + "/" + "".join([x for x in folder_contents if file_suffix in x])
 
 		# If the output file does not exist, set the status for this Pair object to false and return
 		if file_path == self.folder + subfolder:
@@ -295,14 +289,8 @@ class PamlPair ():
 			self.pvalue = 1.0
 			return
 
-		# Calculating chi-square test
-		proc = subprocess.Popen(["chi2 1 %s" % lrt], shell=True, stdout=subprocess.PIPE)
-		chi2_output = proc.stdout.read()
-
-		encoding = locale.getdefaultlocale()[1]
-		chi2_output = chi2_output.decode(encoding)
-
-		self.pvalue = float(chi2_output.split("=")[2])
+		# Calculating chi-square test using scipy.stats
+		self.pvalue = stats.chi2.sf(lrt, 1)   ## df = 1 for the branch-site models lrt 
 
 	def filter_aa(self, clade, set_aa_columns=None):
 		""" This function returns a number of selected amino acid filters, such as conserved, unique or diversifying
@@ -411,12 +399,12 @@ class PamlPair ():
 
 			# Starting the iteration over the selected amino acids to sort them into classes
 			for aminoacid in self.selected_aa:
-				position = int(aminoacid[0]) - 1  # The position of the aa in the alignment
-				aa_column = [codon_table[char[position]] for char in self.alignment.values()]
-				unique_aa_colum = set(aa_column)
-				self.most_common_aa = [x for x in unique_aa_colum if all([aa_column.count(x) >= aa_column.count(y)
+				position = int(aminoacid[0]) -1 # The position of the aa in the alignment
+				aa_column = [codon_table[char[position]] for char in self.alignment.values()]  ## The complete column for sites under selection from the alignment
+				unique_aa_colum = set(aa_column)  ## Creates a list of the aa's present in the column, in spite of frequencies
+				self.most_common_aa = [x for x in unique_aa_colum if all([aa_column.count(x) >= aa_column.count(y)  ## List of the most common aa's for each column of interest
 																		for y in unique_aa_colum])]
-
+				
 				# Check if there is only one variant
 				if len(unique_aa_colum) == 1:
 					self.conserved_aa += 1
@@ -438,7 +426,7 @@ class PamlPair ():
 						continue
 
 					# Counts the number of positively selected sites exclusive but with variation within a given clade
-					elif [x for x in clade_specific_aa if x in other_aa] is []:
+					elif not [x for x in clade_specific_aa if x in other_aa]:
 						self.diverse_aa += 1
 						continue
 
@@ -446,7 +434,7 @@ class PamlPair ():
 						if len(set(clade_specific_aa)) == 1 and clade_specific_aa[0] not in self.most_common_aa:
 							self.mostly_unique += 1
 							continue
-						if [x for x in clade_specific_aa if x in self.most_common_aa] is []:
+						if not [x for x in clade_specific_aa if x in self.most_common_aa]:
 							self.mostly_diverse += 1
 							continue
 
@@ -592,32 +580,6 @@ class PamlPairSet ():
 	def get_gene_class_proportions(self):
 		""" For each gene, get the proportion of sites for each site class """
 
-		def gene_pie(storage):
-			""" Creates an histogram with the number of genes with the most prevalent class for each site class """
-
-			conserved_count, unique_count, diversifying_count = 0, 0, 0
-
-			for gene, vals in storage.items():
-				maximum_val = max(vals)
-				most_prevalent = [i for i, j in enumerate(vals) if j == maximum_val]
-
-				for pos in most_prevalent:
-					if pos == 0:
-						conserved_count += 1
-
-					if pos == 1:
-						unique_count += 1
-
-					if pos == 2:
-						diversifying_count += 1
-
-			pie_data = {"Conserved": conserved_count, "Unique": unique_count, "Diversifying": diversifying_count}
-			print(pie_data)
-
-			pie_chart = vincent.Pie(pie_data)
-			pie_chart.legend("Site classes")
-			pie_chart.to_json("Gene_site_class_distribution.json")
-
 		gene_storage = OrderedDict()  # Order of the list elements [conserved, mostly conserved, unique, diversifying]
 
 		for gene, pair in self.paml_pairs.items():
@@ -642,8 +604,6 @@ class PamlPairSet ():
 
 		output_file.close()
 
-		gene_pie(gene_storage)
-
 	def fdr_correction(self, alpha=0.05):
 		""" Applies a False Discovery Rate correction to the p-values of the PamlPair objects """
 
@@ -655,8 +615,7 @@ class PamlPairSet ():
 
 		pvalue_list = [pval for pval in pvalue_dict.values()]
 
-		fdr_bool_list, fdr_pvalue_list, alpha_s, alpha_b = multi_correction.multipletests(pvalue_list, alpha=alpha,
-																						method="fdr_bh")
+		fdr_bool_list, fdr_pvalue_list = multitest.fdrcorrection(pvals=pvalue_list, alpha=alpha, method="i")
 
 		# Updating PamlPairs with corrected p-value
 		for gene, fdr_val in zip(pvalue_dict, fdr_pvalue_list):
@@ -667,76 +626,6 @@ class PamlPairSet ():
 
 		for gene, pair in self.paml_pairs.items():
 			pair.filter_aa(clade, set_aa_columns=set_aa_columns)
-
-	def site_histogram(self, runmode):
-		""" This method will produce a variety of histograms depending on the run modes.The supported run modes follow:
-			all_selected - Histogram of the distribution of selected sites per gene """
-
-		if "all_selected" in runmode:
-			# Retrieving a list containing the selected sites for each PamlPair with evidence of selection (fdr < 0.05)
-			selected_site_list = []
-
-			for gene, pair in self.paml_pairs.items():
-				if pair.fdr_value < 0.05:
-					selected_site_list.append(len(pair.selected_aa))
-
-			# Setting Bar plot list
-			bar_list = []
-			for i in range(max(selected_site_list) + 1):
-				bar_list.append(selected_site_list.count(i))
-
-			# Constructing plot
-			site_hist = vincent.Bar(bar_list)
-			site_hist.axis_titles(x="Number of selected sites (FDR < 0.05)", y="Frequency")
-			site_hist.to_json("Site_histogram.json")
-
-	def donut_selected_classes(self):
-		""" Creating of a donut-style plot with the number of positively selected sites for each of the following
-		classes: conserved, unique and diversifying """
-
-		selected_aa, conserved_aa, unique_aa, diverse_aa, mostly_conserved, mostly_unique, mostly_diverse = 0, 0, 0, \
-																											0, 0, 0, 0
-
-		for gene, pair in self.paml_pairs.items():
-			if pair.fdr_value < 0.05:
-				selected_aa += len(pair.selected_aa)
-
-				if pair.conserved_aa is not None:
-					conserved_aa += pair.conserved_aa
-
-				if pair.unique_aa is not None:
-					unique_aa += pair.unique_aa
-
-				if pair.diverse_aa is not None:
-					diverse_aa += pair.diverse_aa
-
-				if pair.mostly_conserved is not None:
-					mostly_conserved += pair.mostly_conserved
-
-				try:
-					mostly_unique += pair.mostly_unique
-				except:
-					pass
-
-				try:
-					mostly_diverse += pair.mostly_diverse
-				except:
-					pass
-
-		no_annotation_sites = selected_aa - (conserved_aa + unique_aa + diverse_aa + mostly_conserved + mostly_unique +
-											mostly_diverse)
-
-		data_series = OrderedDict([("Conserved sites (%s)" % conserved_aa, conserved_aa), ("Mostly conversed sites "
-					"(""%s)" % mostly_conserved, mostly_conserved), ("Unique sites (%s)" % unique_aa, unique_aa),
-					("Diverse sites (%s)" % diverse_aa, diverse_aa), ("No annotation (%s)" % no_annotation_sites,
-					no_annotation_sites), ("Mostly unique (%s)" % mostly_unique, mostly_unique), ("Mostly diverse ("
-					"%s)" % mostly_diverse, mostly_diverse)])
-
-		class_chart = vincent.Pie(data_series, inner_radius=150)
-		class_chart.colors(brew="Set2")
-		class_chart.legend("Selection classes")
-
-		class_chart.to_json("Class_distribution.json")
 
 	def check_trend_conserve(self):
 		""" This method can only be applied after the filter_aa method. It parses all codon columns of the conserved
@@ -815,6 +704,7 @@ class PamlPairSet ():
 			element the other codons, it returns a list with two tuples [(clade nucleotide count (1,2,3,4)),
 			(other nucleotide count (1,2,3,4)))] """
 
+			nucleotides = ["A", "T", "G", "C"]
 			clade_count = {"nucA": 0, "nucT": 0, "nucG": 0, "nucC": 0}
 			other_count = {"nucA": 0, "nucT": 0, "nucG": 0, "nucC": 0}
 
@@ -837,72 +727,6 @@ class PamlPairSet ():
 
 			return clade_prop, other_prop
 
-		def write_plot(clade_storage, other_storage, output_file_name):
-			""" wrapper that creates a plot from a storage variable """
-
-			index = ["Clade", "Other"]
-			data = [clade_storage, other_storage]
-			df = pd.DataFrame(data, index=index)
-
-			grouped_bar = vincent.GroupedBar(df)
-			grouped_bar.axis_titles(x='Groups', y='Proportion')
-			grouped_bar.legend(title="Legend")
-			grouped_bar.to_json(output_file_name)
-
-		nucleotides = ["A", "T", "G", "C"]
-		conserved_storage = []
-		mostly_conserved_storage = []
-		all_conserved_storage = []
-		all_mostly_conserved_storage = []
-
-		for gene, pair in self.paml_pairs.items():
-
-			if pair.conserved_aa is not None and pair.conserved_aa > 0:
-
-				conserved_storage.append(pair.conserved_aa_list)
-
-			if pair.mostly_conserved is not None and pair.mostly_conserved > 0:
-
-				mostly_conserved_storage.append(pair.mostly_conserved_aa_list)
-
-			try:
-				all_conserved_storage.append(pair.all_conserved)
-			except:
-				pass
-
-			try:
-				all_mostly_conserved_storage.append(pair.all_mostly_conserved)
-			except:
-				pass
-
-		conserved_counts_clade, conserved_counts_other = check_nucleotides(conserved_storage)
-		mostly_conserved_counts_clade, mostly_conserved_counts_other = check_nucleotides(mostly_conserved_storage)
-
-		# Creating plot
-		write_plot(conserved_counts_clade, conserved_counts_other, "Conserved_nucleotide_trend.json")
-		write_plot(mostly_conserved_counts_clade, mostly_conserved_counts_other, "Mostly_conserved_nucleotide_trend.json")
-
-		conserved_clade_codon, conserve_other_codon = check_codons(conserved_storage)
-		mostly_conserved_clade_codon, mostly_conserved_other_codon = check_codons(mostly_conserved_storage)
-
-		all_conserved_clade_codon, all_conserved_other_codon = check_codons(all_conserved_storage)
-		all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon = check_codons(all_mostly_conserved_storage)
-
-		for clade, other in zip(conserved_clade_codon, conserve_other_codon):
-
-			write_plot(clade[1], other[1], "Conserved_codon_trend_%s.json" % (clade[0]))
-
-		for clade, other in zip(mostly_conserved_clade_codon, mostly_conserved_other_codon):
-
-			write_plot(clade[1], other[1], "Mostly_conserved_codon_trend_%s.json" % (clade[0]))
-
-		for clade, other in zip(all_conserved_clade_codon, all_conserved_other_codon):
-
-			write_plot(clade[1], other[1], "All_conserved_codon_trend_%s.json" % (clade[0]))
-
-		for clade, other in zip(all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon):
-
-			write_plot(clade[1], other[1], "all_mostly_conserved_codon_trend_%s.json" % (clade[0]))
 
 	def write_table(self, output_file):
 		""" Writes the information on the PamlPair objects into a csv table """
@@ -910,7 +734,7 @@ class PamlPairSet ():
 		output_handle = open(output_file, "w")
 		output_handle.write("Gene;lnL Alternative;lnL Null;p-value;FDR correction;N sites;w class 0;w class 1;w class "
 							"2;w class 3;Selected sites; Sites position; Conserved sites;Mostly conserved sites;Unique "
-							"sites;Mostly_unique;Diversifying sites;Mostly diverse; All unique sites \n")
+							"sites;Mostly unique;Diversifying sites;Mostly diverse; All unique sites \n")
 
 		for gene, pair in self.paml_pairs.items():
 			print("\rProcessing selection tests on file %s of %s (%s)" % (list(self.paml_pairs.values()).index(pair),
@@ -959,33 +783,16 @@ if __name__ == "__main__":
 		folder_list = arg.folder_list
 		clade_list = arg.clade
 		output_file = arg.output_file
-		plot_options = arg.plot_options
 		write_alignments = arg.write_alignments
-
-		# Plotting arguments
-		histogram_runmode = arg.histogram
 
 		paml_output = PamlPairSet(folder_list)
 		paml_output.test_selection_suite()
 
 		if clade_list is not None:
-			if plot_options is not None and "b" in plot_options:
-				paml_output.filter_aa(clade_list, set_aa_columns=True)
-			else:
-				paml_output.filter_aa(clade_list)
-
-		if histogram_runmode is not None and histogram_runmode != []:
-			for runmode in histogram_runmode:
-				paml_output.site_histogram(runmode)
-
-		if plot_options is not None:
-
-			if "a" in plot_options:
-				paml_output.donut_selected_classes()
-
-			if "b" in plot_options:
-				paml_output.check_trend_conserve()
-
+			paml_output.filter_aa(clade_list, set_aa_columns=True)
+		else:
+			paml_output.filter_aa(clade_list)
+		
 		if write_alignments:
 
 			paml_output.write_alignments()
