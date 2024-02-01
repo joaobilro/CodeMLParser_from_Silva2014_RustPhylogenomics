@@ -83,6 +83,8 @@ class PamlPair ():
 		self.most_common_aa = None
 		self.all_conserved = None
 		self.all_mostly_conserved = None
+		self.shared = None
+		self.shared_list = None
 
 		# Set folder variable
 		self.folder = folder
@@ -388,7 +390,7 @@ class PamlPair ():
 
 			# Simple numerical attributes of the object
 			self.conserved_aa, self.unique_aa, self.diverse_aa, self.all_clade_unique, self.mostly_conserved, \
-			self.mostly_unique, self.mostly_diverse = 0, 0, 0, 0, 0, 0, 0
+			self.mostly_unique, self.mostly_diverse, self.shared = 0, 0, 0, 0, 0, 0, 0, 0
 
 			if set_aa_columns is True:
 				# More complex attributes containing lists of tuples
@@ -396,6 +398,7 @@ class PamlPair ():
 				self.unique_aa_list = []
 				self.diverse_aa_list = []
 				self.mostly_conserved_aa_list = []
+				self.shared_list = []
 
 			# Starting the iteration over the selected amino acids to sort them into classes
 			for aminoacid in self.selected_aa:
@@ -430,7 +433,7 @@ class PamlPair ():
 						self.diverse_aa += 1
 						continue
 
-					elif self.most_common_aa is not []:
+					elif self.most_common_aa is not [] and [x for x in clade_specific_aa if clade_specific_aa.count(x) > other_aa.count(x)]:
 						if len(set(clade_specific_aa)) == 1 and clade_specific_aa[0] not in self.most_common_aa:
 							self.mostly_unique += 1
 							continue
@@ -441,11 +444,15 @@ class PamlPair ():
 				# Check if the most common aa is also mostly prevalent. This will add to the mostly conserved class,
 				# which relaxes the conserved_aa variant by allowing a small percentage of sites to mutate. Threshold
 				# is hardcoded at 0.70
+				# Shared is a class that represents aminoacids that are shared between the specific clade and other 
+				# species, but are represented at below the .70 cutoff
 				if self.most_common_aa:
 					frequency_most_common_aa = float(aa_column.count(self.most_common_aa[0])) / float(len(aa_column))
 
 					if frequency_most_common_aa > 0.70:
 						self.mostly_conserved += 1
+					else:
+						self.shared +=1 
 
 						if set_aa_columns is True:
 							clade_codon_list = [char[position] for sp, char in self.alignment.items() if sp in clade]
@@ -485,7 +492,7 @@ class PamlPairSet ():
 		self.paml_pairs = OrderedDict()
 
 		for folder in folder_list:
-			print("\rProcessing folder %s out of %s (%s)" % (folder_list.index(folder), len(folder_list), folder)),
+			print("\rProcessing folder %s out of %s (%s)" % (folder_list.index(folder)+1, len(folder_list), folder)),
 
 			paml_object = PamlPair(folder)
 
@@ -539,7 +546,7 @@ class PamlPairSet ():
 		""" For each PamlPair object in the self.paml_pairs conduct a likelihood ratio test for positive selection """
 
 		for pair in self.paml_pairs.values():
-			print("\rProcessing selection tests on file %s of %s (%s)" % (list(self.paml_pairs.values()).index(pair),
+			print("\rProcessing selection tests on file %s of %s (%s)" % (list(self.paml_pairs.values()).index(pair)+1,
 																		len(self.paml_pairs.values()), pair.folder)),
 
 			pair.likelihood_ratio_test()
@@ -548,7 +555,7 @@ class PamlPairSet ():
 		""" Sets the number of genes that contain a given site class as new attributes """
 
 		self.class_proportions = {"conserved": 0, "mostly_conserved": 0, "unique": 0, "diversifying": 0,
-								"mostly_unique": 0, "mostly_diverse": 0}
+								"mostly_unique": 0, "mostly_diverse": 0, "shared": 0}
 		selected_genes = 0
 
 		for pair in self.paml_pairs.values():
@@ -571,6 +578,9 @@ class PamlPairSet ():
 			if pair.mostly_diverse is not None and pair.mostly_diverse > 0 and pair.fdr_value < 0.05:
 				self.class_proportions["mostly_diverse"] += 1
 
+			if pair.shared is not None and pair.shared > 0 and pair.fdr_value < 0.05:
+				self.class_proportions["shared"] += 1
+
 			if pair.fdr_value < 0.05:
 				selected_genes += 1
 
@@ -580,7 +590,7 @@ class PamlPairSet ():
 	def get_gene_class_proportions(self):
 		""" For each gene, get the proportion of sites for each site class """
 
-		gene_storage = OrderedDict()  # Order of the list elements [conserved, mostly conserved, unique, diversifying]
+		gene_storage = OrderedDict()  # Order of the list elements [conserved, mostly conserved, unique, diversifying, shared]
 
 		for gene, pair in self.paml_pairs.items():
 			if pair.fdr_value < 0.05:
@@ -591,16 +601,17 @@ class PamlPairSet ():
 					mostly_conserved_proportion = float(pair.mostly_conserved) / number_selected_aa
 					unique_proportion = (float(pair.unique_aa) + float(pair.mostly_unique)) / number_selected_aa
 					diversifying_proportion = (float(pair.diverse_aa) + float(pair.mostly_diverse)) / number_selected_aa
+					shared_proportion = (float(pair.shared)) / number_selected_aa
 
 					gene_storage[gene] = [conserved_proportion + mostly_conserved_proportion, unique_proportion,
-										diversifying_proportion]
+										diversifying_proportion, shared_proportion]
 
 		output_file = open("Gene_class_proportion.csv", "w")
 
-		output_file.write("Gene; Conserved; Unique; Diversifying\n")
+		output_file.write("Gene; Conserved; Unique; Diversifying; Shared\n")
 
 		for gene, vals in gene_storage.items():
-			output_file.write("%s; %s; %s; %s\n" % (gene, vals[0], vals[1], vals[2]))
+			output_file.write("%s; %s; %s; %s; %s\n" % (gene, vals[0], vals[1], vals[2], vals[3]))
 
 		output_file.close()
 
@@ -735,10 +746,10 @@ class PamlPairSet ():
 		output_handle = open(output_file, "w")
 		output_handle.write("Gene;lnL Alternative;lnL Null;p-value;FDR correction;N sites;w class 0;w class 1;w class "
 							"2;w class 3;Selected sites; Sites position; Conserved sites;Mostly conserved sites;Unique "
-							"sites;Mostly unique;Diversifying sites;Mostly diverse; All unique sites \n")
+							"sites;Mostly unique;Diversifying sites;Mostly diverse; Shared; All unique sites \n")
 
 		for gene, pair in self.paml_pairs.items():
-			print("\rProcessing selection tests on file %s of %s (%s)" % (list(self.paml_pairs.values()).index(pair),
+			print("\rProcessing selection tests on file %s of %s (%s)" % (list(self.paml_pairs.values()).index(pair)+1,
 																		len(self.paml_pairs.values()), pair.folder)),
 
 			try:
@@ -747,7 +758,7 @@ class PamlPairSet ():
 				gene_length = None
 
 			if pair.fdr_value < 0.05:
-				output_handle.write("%s; %s; %s; %s; %s; %s; %s; %s;%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s\n" % (
+				output_handle.write("%s; %s; %s; %s; %s; %s; %s; %s;%s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s; %s\n" % (
 										gene,
 										pair.alternative_lnL,
 										pair.null_lnL,
@@ -766,6 +777,7 @@ class PamlPairSet ():
 										pair.mostly_unique,
 										pair.diverse_aa,
 										pair.mostly_diverse,
+										pair.shared,
 										pair.all_clade_unique))
 			else:
 				output_handle.write("%s; %s; %s; %s; %s; %s\n" % (gene,
