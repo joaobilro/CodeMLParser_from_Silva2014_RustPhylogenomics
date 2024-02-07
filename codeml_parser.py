@@ -42,6 +42,9 @@ parser.add_argument("--clade", "-c", dest="clade", nargs="*", choices = ["puccin
 															"of such clade separated by whitespace: 'pucciniales_genome' or 'pucciniales'")
 parser.add_argument("-o", dest="output_file", help="Provide the name for the output file, .csv format")
 
+parser.add_argument("-p", dest="csv_options", nargs="*", choices=["a"], help="CSV options: a - Conserved"
+																				"trends across clade and other taxa")
+
 parser.add_argument("-w", dest="write_alignments", action="store_const", const=True, help="Use this option if you want"
 																						"to write the gap-free "
 																						"alignments used by codeml")
@@ -294,7 +297,7 @@ class PamlPair ():
 		df = 1		## df = 1 for the branch-site models lrt
 		self.pvalue = float(1 - chi2(df).cdf(lrt))  
 
-	def filter_aa(self, clade, set_aa_columns=None):
+	def filter_aa(self, clade, set_aa_columns=True):
 		""" This function returns a number of selected amino acid filters, such as conserved, unique or diversifying
 		amino acids. A clade of species must be provided and the number of unique and diversifying selected amino
 		acids to that clade will be returned. If there are positively selected sites, this will set a number of
@@ -643,8 +646,6 @@ class PamlPairSet ():
 		""" This method can only be applied after the filter_aa method. It parses all codon columns of the conserved
 		and mostly conserved sites to check for a trend in codon/nucleotide usage """
 
-		import pandas as pd
-
 		codon_table = {
 					'ATA': 'I', 'ATC': 'I', 'ATT': 'I', 'ATG': 'M',
 					'ACA': 'T', 'ACC': 'T', 'ACG': 'T', 'ACT': 'T',
@@ -739,7 +740,72 @@ class PamlPairSet ():
 
 			return clade_prop, other_prop
 
+		def write_conserved(clade_storage, other_storage, file):
+			""" Writes the frequency of used codons for conserved aminoacids to a csv"""
+		
+			for codon, clade_freq in clade_storage.items():
+				other_freq = other_storage[codon]
+				file.write(f"{codon};{clade_freq};{other_freq}\n")
+					
+		conserved_storage = []
+		mostly_conserved_storage = []
+		all_conserved_storage = []
+		all_mostly_conserved_storage = []
 
+		for gene, pair in self.paml_pairs.items():
+
+			if pair.conserved_aa is not None and pair.conserved_aa > 0 and pair.conserved_aa_list:
+  				conserved_storage.append(pair.conserved_aa_list)
+			
+			if pair.mostly_conserved is not None and pair.mostly_conserved > 0 and pair.mostly_conserved_aa_list:
+				mostly_conserved_storage.append(pair.mostly_conserved_aa_list)
+				
+	
+			all_conserved_storage.append(pair.all_conserved)
+		
+
+			all_mostly_conserved_storage.append(pair.all_mostly_conserved)
+
+
+		conserved_counts_clade, conserved_counts_other = check_nucleotides(conserved_storage)
+		mostly_conserved_counts_clade, mostly_conserved_counts_other = check_nucleotides(mostly_conserved_storage)
+
+		# Write data to csv files
+		with open(f"Conserved_nucleotide_trend.csv", "w") as f:
+			f.write("nucleotide;clade_frequency;other_frequency\n")
+			write_conserved(conserved_counts_clade, conserved_counts_other, f)
+		
+		with open(f"Mostly_Conserved_nucleotide_trend.csv", "w") as f:
+			f.write("nucleotide;clade_frequency;other_frequency\n")	
+			write_conserved(mostly_conserved_counts_clade, mostly_conserved_counts_other, f)	
+
+		conserved_clade_codon, conserved_other_codon = check_codons(conserved_storage)
+		mostly_conserved_clade_codon, mostly_conserved_other_codon = check_codons(mostly_conserved_storage)
+
+		all_conserved_clade_codon, all_conserved_other_codon = check_codons(all_conserved_storage)
+		all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon = check_codons(all_mostly_conserved_storage)
+
+
+		with open(f"Conserved_codon_trend.csv", "w") as f:
+			f.write("codon;clade_frequency;other_frequency\n")
+			for clade, other in zip(conserved_clade_codon, conserved_other_codon):
+				write_conserved(clade[1], other[1], f)
+		
+		with open(f"Mostly_Conserved_codon_trend.csv", "w") as f:
+			f.write("codon;clade_frequency;other_frequency\n")
+			for clade, other in zip(mostly_conserved_clade_codon, mostly_conserved_other_codon):
+				write_conserved(clade[1], other[1], f)
+		
+		with open(f"All_Conserved_codon_trend.csv", "w") as f:
+			f.write("codon;clade_frequency;other_frequency\n")
+			for clade, other in zip(all_conserved_clade_codon, all_conserved_other_codon):
+				write_conserved(clade[1], other[1], f)
+		
+		with open(f"All_Mostly_Conserved_codon_trend.csv", "w") as f:
+			f.write("codon;clade_frequency;other_frequency\n")
+			for clade, other in zip(all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon):
+				write_conserved(clade[1], other[1], f)
+			
 	def write_table(self, output_file):
 		""" Writes the information on the PamlPair objects into a csv table """
 
@@ -797,6 +863,7 @@ if __name__ == "__main__":
 		clade_list = arg.clade
 		output_file = arg.output_file
 		write_alignments = arg.write_alignments
+		csv_options = arg.csv_options
 
 		paml_output = PamlPairSet(folder_list)
 		paml_output.test_selection_suite()
@@ -809,6 +876,9 @@ if __name__ == "__main__":
 		if write_alignments:
 
 			paml_output.write_alignments()
+
+		if csv_options is not None:
+			paml_output.check_trend_conserve()
 
 		#paml_output.get_class_proportion()
 		paml_output.get_gene_class_proportions()
