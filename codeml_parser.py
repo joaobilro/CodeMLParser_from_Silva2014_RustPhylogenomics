@@ -647,23 +647,24 @@ class PamlPairSet ():
 		and mostly conserved sites to check for a trend in codon/nucleotide usage """
 
 		codon_table = {
-					'ATA': 'I', 'ATC': 'I', 'ATT': 'I', 'ATG': 'M',
-					'ACA': 'T', 'ACC': 'T', 'ACG': 'T', 'ACT': 'T',
-					'AAC': 'N', 'AAT': 'N', 'AAA': 'K', 'AAG': 'K',
-					'AGC': 'S', 'AGT': 'S', 'AGA': 'R', 'AGG': 'R',
-					'CTA': 'L', 'CTC': 'L', 'CTG': 'L', 'CTT': 'L',
-					'CCA': 'P', 'CCC': 'P', 'CCG': 'P', 'CCT': 'P',
-					'CAC': 'H', 'CAT': 'H', 'CAA': 'Q', 'CAG': 'Q',
-					'CGA': 'R', 'CGC': 'R', 'CGG': 'R', 'CGT': 'R',
-					'GTA': 'V', 'GTC': 'V', 'GTG': 'V', 'GTT': 'V',
-					'GCA': 'A', 'GCC': 'A', 'GCG': 'A', 'GCT': 'A',
-					'GAC': 'D', 'GAT': 'D', 'GAA': 'E', 'GAG': 'E',
-					'GGA': 'G', 'GGC': 'G', 'GGG': 'G', 'GGT': 'G',
-					'TCA': 'S', 'TCC': 'S', 'TCG': 'S', 'TCT': 'S',
-					'TTC': 'F', 'TTT': 'F', 'TTA': 'L', 'TTG': 'L',
-					'TAC': 'Y', 'TAT': 'Y', 'TAA': '_', 'TAG': '_',
-					'TGC': 'C', 'TGT': 'C', 'TGA': '_', 'TGG': 'W'}
+    	'ATA': 'I', 'ATC': 'I', 'ATT': 'I', 'ATG': 'M',
+		'ACA': 'T', 'ACC': 'T', 'ACG': 'T', 'ACT': 'T',
+		'AAC': 'N', 'AAT': 'N', 'AAA': 'K', 'AAG': 'K',
+		'AGC': 'S', 'AGT': 'S', 'AGA': 'R', 'AGG': 'R',
+		'CTA': 'L', 'CTC': 'L', 'CTG': 'L', 'CTT': 'L',
+		'CCA': 'P', 'CCC': 'P', 'CCG': 'P', 'CCT': 'P',
+		'CAC': 'H', 'CAT': 'H', 'CAA': 'Q', 'CAG': 'Q',
+		'CGA': 'R', 'CGC': 'R', 'CGG': 'R', 'CGT': 'R',
+		'GTA': 'V', 'GTC': 'V', 'GTG': 'V', 'GTT': 'V',
+		'GCA': 'A', 'GCC': 'A', 'GCG': 'A', 'GCT': 'A',
+		'GAC': 'D', 'GAT': 'D', 'GAA': 'E', 'GAG': 'E',
+		'GGA': 'G', 'GGC': 'G', 'GGG': 'G', 'GGT': 'G',
+		'TCA': 'S', 'TCC': 'S', 'TCG': 'S', 'TCT': 'S',
+		'TTC': 'F', 'TTT': 'F', 'TTA': 'L', 'TTG': 'L',
+		'TAC': 'Y', 'TAT': 'Y', 'TAA': '_', 'TAG': '_',
+		'TGC': 'C', 'TGT': 'C', 'TGA': '_', 'TGG': 'W'}
 
+		
 		def check_codons(set_list):
 			""" Given a list of sets, with the first element of a set containing the clade codons and the second
 			element the other codons, this determines codon usage bias. For a given amino acid, it counts the usage of
@@ -746,7 +747,7 @@ class PamlPairSet ():
 			for codon, clade_freq in clade_storage.items():
 				other_freq = other_storage[codon]
 				file.write(f"{codon};{clade_freq};{other_freq}\n")
-					
+    	
 		conserved_storage = []
 		mostly_conserved_storage = []
 		all_conserved_storage = []
@@ -755,8 +756,8 @@ class PamlPairSet ():
 		for gene, pair in self.paml_pairs.items():
 
 			if pair.conserved_aa is not None and pair.conserved_aa > 0 and pair.conserved_aa_list:
-  				conserved_storage.append(pair.conserved_aa_list)
-			
+				conserved_storage.append(pair.conserved_aa_list)
+		
 			if pair.mostly_conserved is not None and pair.mostly_conserved > 0 and pair.mostly_conserved_aa_list:
 				mostly_conserved_storage.append(pair.mostly_conserved_aa_list)
 				
@@ -768,8 +769,8 @@ class PamlPairSet ():
 
 
 		conserved_counts_clade, conserved_counts_other = check_nucleotides(conserved_storage)
-		mostly_conserved_counts_clade, mostly_conserved_counts_other = check_nucleotides(mostly_conserved_storage)
-
+		mostly_conserved_counts_clade, mostly_conserved_counts_other = check_nucleotides(mostly_conserved_storage)	
+ 		
 		# Write data to csv files
 		with open(f"Conserved_nucleotide_trend.csv", "w") as f:
 			f.write("nucleotide;clade_frequency;other_frequency\n")
@@ -786,26 +787,27 @@ class PamlPairSet ():
 		all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon = check_codons(all_mostly_conserved_storage)
 
 
-		with open(f"Conserved_codon_trend.csv", "w") as f:
-			f.write("codon;clade_frequency;other_frequency\n")
-			for clade, other in zip(conserved_clade_codon, conserved_other_codon):
+		for clade, other in zip(conserved_clade_codon, conserved_other_codon):
+			with open(f"Conserved_codon_trend{clade[0]}.csv", "w") as f:
+				f.write("codon;clade_frequency;other_frequency\n")
 				write_conserved(clade[1], other[1], f)
 		
-		with open(f"Mostly_Conserved_codon_trend.csv", "w") as f:
-			f.write("codon;clade_frequency;other_frequency\n")
-			for clade, other in zip(mostly_conserved_clade_codon, mostly_conserved_other_codon):
+		for clade, other in zip(mostly_conserved_clade_codon, mostly_conserved_other_codon):
+			with open(f"Mostly_Conserved_codon_trend{clade[0]}.csv", "w") as f:
+				f.write("codon;clade_frequency;other_frequency\n")
+				write_conserved(clade[1], other[1], f)
+
+		for clade, other in zip(all_conserved_clade_codon, all_conserved_other_codon):		
+			with open(f"All_Conserved_codon_trend{clade[0]}.csv", "w") as f:
+				f.write("codon;clade_frequency;other_frequency\n")
 				write_conserved(clade[1], other[1], f)
 		
-		with open(f"All_Conserved_codon_trend.csv", "w") as f:
-			f.write("codon;clade_frequency;other_frequency\n")
-			for clade, other in zip(all_conserved_clade_codon, all_conserved_other_codon):
+		for clade, other in zip(all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon):		
+			with open(f"All_Mostly_Conserved_codon_trend{clade[0]}.csv", "w") as f:
+				f.write("codon;clade_frequency;other_frequency\n")
 				write_conserved(clade[1], other[1], f)
-		
-		with open(f"All_Mostly_Conserved_codon_trend.csv", "w") as f:
-			f.write("codon;clade_frequency;other_frequency\n")
-			for clade, other in zip(all_mostly_conserved_clade_codon, all_mostly_conserved_other_codon):
-				write_conserved(clade[1], other[1], f)
-			
+    
+    
 	def write_table(self, output_file):
 		""" Writes the information on the PamlPair objects into a csv table """
 
