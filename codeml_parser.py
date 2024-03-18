@@ -147,17 +147,10 @@ class PamlPair ():
 		self.selected_aa = []
 
 		for line in file_handle:
-			if line.strip().startswith("seed used = "):
-				fall_back_alignment_counter = 1
-				# Getting preliminary gene length. If the alignment is not reduced due to gaps, this gene_length
-				# variable will be used. Otherwise it will be replaced by the gap free alignment length
-				gene_length_str = next(file_handle)
-
-				if gene_length_str.strip() != "":
-					self.gene_length = gene_length_str.strip().split()[1]
-
 			if line.strip().startswith("Before deleting alignment gaps"):
 				fall_back_alignment_counter = 0
+				gene_length_str = next(file_handle)
+				self.gene_length = gene_length_str.strip().split()[1]
 
 			# Getting the gene length
 			if line.strip().startswith("After deleting gaps."):
